@@ -4,7 +4,8 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const connectDB = require("./config/db");
-const userRoutes = require("./routes/userRoutes"); // <--- Import Routes
+const userRoutes = require("./routes/userRoutes");
+const chatRoutes = require("./routes/chatRoutes"); // <--- NEW IMPORT
 
 // Load environment variables
 dotenv.config();
@@ -19,7 +20,8 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
-app.use("/api/user", userRoutes); // <--- Use User Routes
+app.use("/api/user", userRoutes);
+app.use("/api/chat", chatRoutes); // <--- NEW ROUTE
 
 // Socket.io Setup
 const io = new Server(server, {
@@ -32,6 +34,8 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log(`User Connected: ${socket.id}`);
 
+  // We will add real-time logic here in the next step!
+  
   socket.on("disconnect", () => {
     console.log("User Disconnected", socket.id);
   });
