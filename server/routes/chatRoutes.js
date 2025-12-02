@@ -4,18 +4,18 @@ const {
   createChannel,
   fetchChannels,
   joinChannel,
+  leaveChannel, // <--- Import this
   sendMessage,
   fetchMessages,
 } = require("../controllers/chatController");
 
 const router = express.Router();
 
-// Channel Routes
 router.route("/channel").post(protect, createChannel);
 router.route("/channels").get(protect, fetchChannels);
 router.route("/channel/join").put(protect, joinChannel);
+router.route("/channel/leave").put(protect, leaveChannel); // <--- Add this
 
-// Message Routes
 router.route("/message").post(protect, sendMessage);
 router.route("/message/:channelId").get(protect, fetchMessages);
 

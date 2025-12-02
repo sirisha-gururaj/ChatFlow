@@ -5,12 +5,9 @@ const http = require("http");
 const { Server } = require("socket.io");
 const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
-const chatRoutes = require("./routes/chatRoutes"); // <--- NEW IMPORT
+const chatRoutes = require("./routes/chatRoutes");
 
-// Load environment variables
 dotenv.config();
-
-// Connect to Database
 connectDB();
 
 const app = express();
@@ -19,25 +16,54 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 
-// Routes
 app.use("/api/user", userRoutes);
-app.use("/api/chat", chatRoutes); // <--- NEW ROUTE
+app.use("/api/chat", chatRoutes);
 
-// Socket.io Setup
 const io = new Server(server, {
+  pingTimeout: 60000,
   cors: {
     origin: "http://localhost:5173",
     methods: ["GET", "POST"],
   },
 });
 
-io.on("connection", (socket) => {
-  console.log(`User Connected: ${socket.id}`);
+// Track online users (Set prevents duplicates)
+const onlineUsers = new Set();
 
-  // We will add real-time logic here in the next step!
-  
+io.on("connection", (socket) => {
+  // 1. Setup: User joins their own room
+  socket.on("setup", (userData) => {
+    socket.join(userData._id);
+    socket.userData = userData; // Store user data on socket object
+    onlineUsers.add(userData._id);
+    
+    // Broadcast updated online list to everyone
+    io.emit("online users", Array.from(onlineUsers));
+    socket.emit("connected");
+  });
+
+  // 2. Join Chat
+  socket.on("join chat", (room) => {
+    socket.join(room);
+  });
+
+  // 3. New Message
+  socket.on("new message", (newMessageRecieved) => {
+    var chat = newMessageRecieved.channel;
+    if (!chat._id) return;
+    socket.to(chat._id).emit("message received", newMessageRecieved);
+  });
+
+  // 4. Typing Indicators
+  socket.on("typing", (room) => socket.in(room).emit("typing"));
+  socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
+
+  // 5. Disconnect
   socket.on("disconnect", () => {
-    console.log("User Disconnected", socket.id);
+    if (socket.userData) {
+      onlineUsers.delete(socket.userData._id);
+      io.emit("online users", Array.from(onlineUsers));
+    }
   });
 });
 
