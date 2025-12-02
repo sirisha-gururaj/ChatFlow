@@ -27,17 +27,14 @@ const io = new Server(server, {
   },
 });
 
-// Track online users (Set prevents duplicates)
 const onlineUsers = new Set();
 
 io.on("connection", (socket) => {
-  // 1. Setup: User joins their own room
+  // 1. Setup
   socket.on("setup", (userData) => {
     socket.join(userData._id);
-    socket.userData = userData; // Store user data on socket object
+    socket.userData = userData;
     onlineUsers.add(userData._id);
-    
-    // Broadcast updated online list to everyone
     io.emit("online users", Array.from(onlineUsers));
     socket.emit("connected");
   });
@@ -54,9 +51,21 @@ io.on("connection", (socket) => {
     socket.to(chat._id).emit("message received", newMessageRecieved);
   });
 
-  // 4. Typing Indicators
+  // 4. Typing
   socket.on("typing", (room) => socket.in(room).emit("typing"));
   socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
+
+  // --- NEW: Channel Events ---
+  socket.on("delete channel", (channelId) => {
+    // Broadcast to everyone so their UI updates immediately
+    io.emit("channel deleted", channelId); 
+  });
+
+  // --- NEW: User Events ---
+  socket.on("user updated", (updatedUser) => {
+    // Broadcast new name to everyone
+    io.emit("user updated", updatedUser);
+  });
 
   // 5. Disconnect
   socket.on("disconnect", () => {

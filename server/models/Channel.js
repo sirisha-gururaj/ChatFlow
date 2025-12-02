@@ -4,6 +4,9 @@ const channelSchema = mongoose.Schema(
   {
     name: { type: String, trim: true, required: true },
     description: { type: String, default: "Welcome to this channel!" },
+    isPrivate: { type: Boolean, default: false },
+    password: { type: String, select: false },
+    isDeleted: { type: Boolean, default: false }, // <--- NEW FIELD
     members: [
       {
         type: mongoose.Schema.Types.ObjectId,
