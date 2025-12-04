@@ -4,7 +4,8 @@ import axios from "axios";
 import { io } from "socket.io-client";
 import { 
   FaPlus, FaSignOutAlt, FaPaperPlane, FaUserCircle, FaUsers, 
-  FaDoorOpen, FaLock, FaUnlock, FaComments, FaPen, FaCheck, FaTrash
+  FaDoorOpen, FaLock, FaUnlock, FaComments, FaPen, FaCheck, FaTrash,
+  FaEye, FaEyeSlash, FaCrown // Added FaCrown for the admin icon
 } from "react-icons/fa";
 import { IoMdClose } from "react-icons/io";
 
@@ -25,7 +26,10 @@ const Chat = () => {
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newUsername, setNewUsername] = useState("");
-  const [isReadOnly, setIsReadOnly] = useState(false); 
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  
+  // --- TOOLTIP STATE ---
+  const [tooltip, setTooltip] = useState({ visible: false, text: "", top: 0, left: 0 });
   
   // --- MODAL STATES ---
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -33,9 +37,16 @@ const Chat = () => {
   
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joinPassword, setJoinPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  
+  // NEW STATE: To track if the modal was triggered by the sidebar delete icon
+  const [isSidebarDeleteAction, setIsSidebarDeleteAction] = useState(false);
+
+  // Track which channel is being hovered in sidebar to show delete icon
+  const [hoveredChannel, setHoveredChannel] = useState(null);
 
   const [typing, setTyping] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -66,12 +77,9 @@ const Chat = () => {
       }
     });
 
-    // Handle Username Updates Everywhere
     socket.on("user updated", (updatedUser) => {
-      // 1. Update Messages History
       setMessages((prevMessages) => 
         prevMessages.map((msg) => {
-          // Check if msg.sender exists and matches the updated user ID
           if (msg.sender && msg.sender._id === updatedUser._id) {
             return { ...msg, sender: { ...msg.sender, username: updatedUser.username } };
           }
@@ -79,7 +87,6 @@ const Chat = () => {
         })
       );
       
-      // 2. Update Channels List (Sidebar)
       setChannels((prevChannels) =>
         prevChannels.map((c) => ({
           ...c,
@@ -89,7 +96,6 @@ const Chat = () => {
         }))
       );
 
-      // 3. Update Current Channel (Header & Member List)
       setCurrentChannel((prev) => {
         if (!prev) return prev;
         return {
@@ -160,6 +166,7 @@ const Chat = () => {
   const handleJoinClick = () => {
     if (currentChannel.isPrivate) {
       setJoinPassword("");
+      setShowPassword(false);
       setShowJoinModal(true);
     } else {
       submitJoinChannel(null);
@@ -181,8 +188,18 @@ const Chat = () => {
     }
   };
 
+  // Triggered from Header "Door" Icon
   const handleLeaveClick = () => {
+    setIsSidebarDeleteAction(false); // It's a normal leave action
     setShowLeaveModal(true);
+  };
+
+  // Triggered from Sidebar "Trash" Icon
+  const handleSidebarDelete = (e, channel) => {
+    e.stopPropagation();
+    setCurrentChannel(channel); 
+    setIsSidebarDeleteAction(true); // It's a sidebar delete action
+    setShowLeaveModal(true); 
   };
 
   const submitLeaveChannel = async () => {
@@ -193,7 +210,10 @@ const Chat = () => {
         { channelId: currentChannel._id },
         config
       );
-      refreshChannels();
+      
+      // Remove that channel from the list completely for this specific user
+      setChannels(prevChannels => prevChannels.filter(c => c._id !== currentChannel._id));
+      
       setCurrentChannel(null); 
       setShowLeaveModal(false);
     } catch (error) {
@@ -363,7 +383,9 @@ const Chat = () => {
             <div
               key={channel._id}
               onClick={() => setCurrentChannel(channel)}
-              className={`flex items-center px-3 py-2 cursor-pointer rounded-lg transition-colors group ${
+              onMouseEnter={() => setHoveredChannel(channel._id)}
+              onMouseLeave={() => setHoveredChannel(null)}
+              className={`flex items-center px-3 py-2 cursor-pointer rounded-lg transition-colors group relative ${
                 currentChannel?._id === channel._id ? "bg-indigo-600 text-white" : "text-gray-400 hover:bg-gray-800 hover:text-gray-200"
               }`}
             >
@@ -373,7 +395,20 @@ const Chat = () => {
                 <FaComments className="mr-2 text-sm opacity-60" />
               )}
               <span className="truncate font-medium flex-1">{channel.name}</span>
-              {channel.members.some(m => m._id === user?._id) && (
+              
+              {/* Delete Icon on Hover */}
+              {hoveredChannel === channel._id && (
+                <button
+                  onClick={(e) => handleSidebarDelete(e, channel)}
+                  className="p-1 hover:text-red-400 transition"
+                  title="Delete Channel"
+                >
+                  <FaTrash size={10} />
+                </button>
+              )}
+
+              {/* Active Indicator (if not hovered) */}
+              {hoveredChannel !== channel._id && channel.members.some(m => m._id === user?._id) && (
                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 ml-2"></div>
               )}
             </div>
@@ -427,8 +462,37 @@ const Chat = () => {
                 ) : (
                   <FaComments className="text-gray-400 mr-2 flex-shrink-0" />
                 )}
-                <h2 className="text-lg font-bold text-gray-800 truncate mr-4">{currentChannel.name}</h2>
-                <button onClick={() => setShowMembersModal(true)} className="flex items-center text-xs text-gray-500 hover:text-indigo-600 bg-gray-100 px-2 py-1 rounded-md transition">
+                <h2 
+                  className="text-lg font-bold text-gray-800 truncate mr-4 cursor-help"
+                  onMouseEnter={(e) => {
+                    if (currentChannel.description) {
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setTooltip({
+                        visible: true,
+                        text: currentChannel.description,
+                        top: rect.bottom + 5, 
+                        left: rect.left
+                      });
+                    }
+                  }}
+                  onMouseLeave={() => setTooltip({ ...tooltip, visible: false })}
+                >
+                  {currentChannel.name}
+                </h2>
+                <button 
+                  onClick={() => {
+                    if (currentChannel.isPrivate && !isMember) {
+                      return; 
+                    }
+                    setShowMembersModal(true);
+                  }} 
+                  className={`flex items-center text-xs bg-gray-100 px-2 py-1 rounded-md transition ${
+                    currentChannel.isPrivate && !isMember 
+                      ? "text-gray-400 cursor-not-allowed opacity-60" 
+                      : "text-gray-500 hover:text-indigo-600 cursor-pointer"
+                  }`}
+                  title={currentChannel.isPrivate && !isMember ? "Join to view members" : "View members"}
+                >
                   <FaUsers className="mr-1" />
                   {currentChannel.members.length} members
                 </button>
@@ -467,7 +531,7 @@ const Chat = () => {
                       <div className="relative w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs mr-2 mt-1 flex-shrink-0">
                         {displayName.charAt(0).toUpperCase()}
                         {isOnline && (
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full ring-2 ring-white"></div>
+                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full ring-2 ring-white z-10"></div>
                         )}
                       </div>
                     )}
@@ -494,17 +558,16 @@ const Chat = () => {
                 </div>
               ) : isMember ? (
                 <div className="flex items-center bg-gray-100 rounded-xl px-4 py-2">
-                  <input type="text" placeholder={`Message #${currentChannel.name}`} className="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 py-2 min-w-0" value={newMessage} onChange={typingHandler} onKeyDown={sendMessage} />
+                  <input type="text" placeholder={`Message ${currentChannel.name}`} className="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 py-2 min-w-0" value={newMessage} onChange={typingHandler} onKeyDown={sendMessage} />
                   <button onClick={(e) => sendMessage({ key: 'Enter', preventDefault: () => {} })} className="ml-2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md">
                     <FaPaperPlane />
                   </button>
                 </div>
               ) : (
                 <div className="text-center">
-                   {currentChannel.description && <p className="text-gray-500 text-sm mb-4 italic">"{currentChannel.description}"</p>}
                    <button onClick={handleJoinClick} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-[1.01] flex items-center justify-center">
                     {currentChannel.isPrivate && <FaLock className="mr-2" />}
-                    {currentChannel.isPrivate ? "Join Private Channel" : `Join #${currentChannel.name}`}
+                    {currentChannel.isPrivate ? "Join Private Channel" : `Join ${currentChannel.name}`}
                   </button>
                 </div>
               )}
@@ -521,11 +584,21 @@ const Chat = () => {
         )}
       </div>
 
+      {/* --- TOOLTIP COMPONENT --- */}
+      {tooltip.visible && (
+        <div 
+            className="fixed z-50 bg-gray-800 text-white text-xs px-3 py-2 rounded-md shadow-xl border border-gray-700 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]"
+            style={{ top: tooltip.top, left: tooltip.left }}
+        >
+            {tooltip.text}
+        </div>
+      )}
+
       {showMembersModal && currentChannel && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden transform scale-100">
             <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-gray-700">Members of #{currentChannel.name}</h3>
+              <h3 className="font-bold text-gray-700">Members of {currentChannel.name}</h3>
               <button onClick={() => setShowMembersModal(false)} className="text-gray-400 hover:text-gray-600"><IoMdClose size={24} /></button>
             </div>
             <div className="p-4 max-h-80 overflow-y-auto">
@@ -535,6 +608,14 @@ const Chat = () => {
                     {member.username.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-gray-700 font-medium">{member.username}</span>
+                  
+                  {/* ADMIN BADGE */}
+                  {currentChannel.admin === member._id && (
+                     <span className="ml-2 text-[10px] bg-yellow-100 text-yellow-700 border border-yellow-200 px-2 py-0.5 rounded-full font-bold uppercase flex items-center">
+                       <FaCrown className="mr-1 text-[9px]"/> Admin
+                     </span>
+                  )}
+
                   {member._id === user._id && <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">You</span>}
                 </div>
               ))}
@@ -591,8 +672,27 @@ const Chat = () => {
                  <FaLock className="text-2xl text-yellow-500" />
               </div>
               <h3 className="text-xl font-bold text-gray-800 mb-2">Private Channel</h3>
-              <p className="text-gray-500 mb-6 text-sm">Enter the password to join <span className="font-bold">#{currentChannel?.name}</span></p>
-              <input type="password" className="w-full border rounded-lg px-4 py-2 mb-4 focus:ring-2 focus:ring-indigo-500 outline-none text-center" placeholder="Enter Password" value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} autoFocus onKeyDown={(e) => e.key === 'Enter' && submitJoinChannel(joinPassword)} />
+              <p className="text-gray-500 mb-6 text-sm">Enter the password to join <span className="font-bold">{currentChannel?.name}</span></p>
+              
+              <div className="relative mb-4">
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  className="w-full border rounded-lg px-4 py-2 pr-10 focus:ring-2 focus:ring-indigo-500 outline-none text-center" 
+                  placeholder="Enter Password" 
+                  value={joinPassword} 
+                  onChange={(e) => setJoinPassword(e.target.value)} 
+                  autoFocus 
+                  onKeyDown={(e) => e.key === 'Enter' && submitJoinChannel(joinPassword)} 
+                />
+                <button 
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 focus:outline-none"
+                  type="button"
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
+
               <div className="flex space-x-3">
                  <button onClick={() => setShowJoinModal(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Cancel</button>
                  <button onClick={() => submitJoinChannel(joinPassword)} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition shadow-sm">Join</button>
@@ -604,14 +704,24 @@ const Chat = () => {
       {showLeaveModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                 <FaSignOutAlt className="text-2xl text-red-500" />
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${isSidebarDeleteAction ? "bg-red-100" : "bg-red-100"}`}>
+                 {isSidebarDeleteAction ? (
+                    <FaTrash className="text-2xl text-red-600" />
+                 ) : (
+                    <FaSignOutAlt className="text-2xl text-red-500" />
+                 )}
               </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">Leave Channel?</h3>
-              <p className="text-gray-500 mb-6 text-sm">Are you sure you want to leave <span className="font-bold">#{currentChannel?.name}</span>?</p>
+              <h3 className="text-xl font-bold text-gray-800 mb-2">
+                 {isSidebarDeleteAction ? "Delete Channel?" : "Leave Channel?"}
+              </h3>
+              <p className="text-gray-500 mb-6 text-sm">
+                 Are you sure you want to leave <span className="font-bold">{currentChannel?.name}</span>{isSidebarDeleteAction ? " before deleting?" : "?"}
+              </p>
               <div className="flex space-x-3">
                  <button onClick={() => setShowLeaveModal(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">Cancel</button>
-                 <button onClick={submitLeaveChannel} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition shadow-sm">Leave</button>
+                 <button onClick={submitLeaveChannel} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition shadow-sm">
+                    {isSidebarDeleteAction ? "Delete" : "Leave"}
+                 </button>
               </div>
            </div>
         </div>

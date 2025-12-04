@@ -25,7 +25,11 @@ const createChannel = async (req, res) => {
 
 const fetchChannels = async (req, res) => {
   try {
-    const channels = await Channel.find({}).populate("members", "-password");
+    // CHANGE: Only fetch channels where the logged-in user is a member
+    const channels = await Channel.find({ members: req.user._id })
+      .populate("members", "-password")
+      .sort({ updatedAt: -1 });
+      
     res.json(channels);
   } catch (error) {
     res.status(400).json({ message: error.message });
