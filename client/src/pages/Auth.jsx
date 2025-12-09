@@ -38,14 +38,17 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden p-8 space-y-8">
+    <div 
+      className="min-h-screen flex items-center justify-center p-4"
+      style={{ backgroundImage: "linear-gradient(120deg, #f6d365 0%, #fda085 100%)" }}
+    >
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-8 space-y-8">
         {/* Header */}
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-indigo-600 tracking-tighter mb-2">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent tracking-tighter mb-2">
             ChatFlow
           </h1>
-          <p className="text-gray-500 text-sm">
+          <p className="text-gray-600 text-sm">
             {isLogin ? "Welcome back! Please login." : "Create an account to join."}
           </p>
         </div>
@@ -54,7 +57,7 @@ const Auth = () => {
         <div className="flex bg-gray-100 p-1 rounded-xl">
           <button
             className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              isLogin ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              isLogin ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
             onClick={() => setIsLogin(true)}
           >
@@ -62,7 +65,7 @@ const Auth = () => {
           </button>
           <button
             className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
-              !isLogin ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              !isLogin ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
             }`}
             onClick={() => setIsLogin(false)}
           >
@@ -78,7 +81,7 @@ const Auth = () => {
               <input
                 type="text"
                 placeholder="johndoe"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-colors"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required={!isLogin}
@@ -91,7 +94,7 @@ const Auth = () => {
             <input
               type="email"
               placeholder="name@example.com"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-colors"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -103,7 +106,7 @@ const Auth = () => {
             <input
               type="password"
               placeholder="••••••••"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-colors"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none transition-colors"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -113,7 +116,7 @@ const Auth = () => {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-lg transition-all duration-200 shadow-lg shadow-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-semibold py-3 rounded-lg transition-all duration-200 shadow-lg shadow-orange-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? "Processing..." : isLogin ? "Login" : "Create Account"}
           </button>
