@@ -23,7 +23,7 @@ const io = new Server(server, {
   pingTimeout: 60000,
   cors: {
     origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
+    methods: ["GET", "POST", "PUT", "DELETE"],
   },
 });
 
@@ -51,19 +51,34 @@ io.on("connection", (socket) => {
     socket.to(chat._id).emit("message received", newMessageRecieved);
   });
 
-  // 4. Typing
-  socket.on("typing", (room) => socket.in(room).emit("typing"));
+  // --- UPDATED: Typing with Username ---
+  socket.on("typing", (room) => {
+    // Send the username of the person typing
+    const username = socket.userData ? socket.userData.username : "Someone";
+    socket.in(room).emit("typing", username); 
+  });
+  
   socket.on("stop typing", (room) => socket.in(room).emit("stop typing"));
 
-  // --- NEW: Channel Events ---
+  // --- NEW: Update & Delete Events ---
+  socket.on("update message", (updatedMessage) => {
+     var chat = updatedMessage.channel;
+     if(!chat._id) return;
+     socket.to(chat._id).emit("message updated", updatedMessage);
+  });
+
+  socket.on("delete message", (data) => {
+     // data should contain { channelId, messageId }
+     socket.to(data.channelId).emit("message deleted", data.messageId);
+  });
+
+  // Channel Events
   socket.on("delete channel", (channelId) => {
-    // Broadcast to everyone so their UI updates immediately
     io.emit("channel deleted", channelId); 
   });
 
-  // --- NEW: User Events ---
+  // User Events
   socket.on("user updated", (updatedUser) => {
-    // Broadcast new name to everyone
     io.emit("user updated", updatedUser);
   });
 

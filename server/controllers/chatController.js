@@ -25,11 +25,9 @@ const createChannel = async (req, res) => {
 
 const fetchChannels = async (req, res) => {
   try {
-    // CHANGE: Only fetch channels where the logged-in user is a member
     const channels = await Channel.find({ members: req.user._id })
       .populate("members", "-password")
       .sort({ updatedAt: -1 });
-      
     res.json(channels);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -73,11 +71,9 @@ const leaveChannel = async (req, res) => {
   }
 };
 
-// --- NEW: Soft Delete Channel ---
 const deleteChannel = async (req, res) => {
   const channelId = req.params.channelId;
   try {
-    // Only set isDeleted to true, don't remove from DB so history is preserved
     const deleted = await Channel.findByIdAndUpdate(
       channelId,
       { isDeleted: true },
@@ -94,7 +90,6 @@ const sendMessage = async (req, res) => {
   if (!content || !channelId) return res.status(400).json({ message: "Invalid data passed" });
 
   try {
-    // Check if channel is deleted
     const channel = await Channel.findById(channelId);
     if(channel.isDeleted) return res.status(400).json({message: "Cannot send message to deleted channel"});
 
@@ -115,20 +110,117 @@ const sendMessage = async (req, res) => {
 const fetchMessages = async (req, res) => {
   const pageSize = 20;
   const page = Number(req.query.page) || 1;
+
   try {
-    const messages = await Message.find({ channel: req.params.channelId })
+    let query = { 
+        channel: req.params.channelId,
+        // Exclude "Delete for me" messages from general history
+        deletedFor: { $ne: req.user._id } 
+    };
+
+    const messages = await Message.find(query)
       .populate("sender", "username avatar email")
       .sort({ createdAt: -1 })
       .skip(pageSize * (page - 1))
       .limit(pageSize);
     
-    // We also return channel status to let frontend know if it's deleted
     const channel = await Channel.findById(req.params.channelId);
     
     res.json({
       messages: messages.reverse(),
       isDeleted: channel ? channel.isDeleted : false
     });
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+const editMessage = async (req, res) => {
+  const { messageId, content } = req.body;
+  try {
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: "Message not found" });
+
+    if (message.sender.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ message: "Not authorized to edit this message" });
+    }
+
+    message.content = content;
+    await message.save();
+    
+    const fullMessage = await Message.findById(messageId)
+      .populate("sender", "username avatar")
+      .populate("channel");
+
+    res.json(fullMessage);
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+const deleteMessage = async (req, res) => {
+  const messageId = req.params.messageId;
+  const { deleteType } = req.body; 
+
+  try {
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: "Message not found" });
+
+    if (message.sender.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ message: "Not authorized to delete this message" });
+    }
+
+    if (deleteType === "everyone") {
+        // OVERWRITE the content in the DB. The original text is lost.
+        message.content = `This message was deleted by ${req.user.username}`;
+        message.isDeletedForAll = true;
+        await message.save();
+        
+        const fullMessage = await Message.findById(messageId)
+            .populate("sender", "username avatar")
+            .populate("channel");
+            
+        return res.json({ type: "everyone", message: fullMessage });
+    } 
+    else if (deleteType === "me") {
+        // Keep content for others, but hide it for me
+        if (!message.deletedFor.includes(req.user._id)) {
+            message.deletedFor.push(req.user._id);
+            await message.save();
+        }
+        return res.json({ type: "me", messageId });
+    } 
+    else {
+        return res.status(400).json({ message: "Invalid delete type" });
+    }
+
+  } catch (error) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+// --- UPDATED: Search Global Messages ---
+const searchGlobalMessages = async (req, res) => {
+  const keyword = req.query.search;
+  if (!keyword) return res.json([]);
+
+  try {
+    const userChannels = await Channel.find({ members: req.user._id }).distinct('_id');
+
+    const messages = await Message.find({
+      channel: { $in: userChannels },
+      content: { $regex: keyword, $options: "i" },
+      // 1. Exclude messages deleted for this specific user
+      deletedFor: { $ne: req.user._id }, 
+      // 2. Exclude messages deleted for everyone (so they don't show in search results)
+      isDeletedForAll: { $ne: true } 
+    })
+    .populate("sender", "username avatar")
+    .populate("channel", "name")
+    .sort({ createdAt: -1 })
+    .limit(50); 
+
+    res.json(messages);
   } catch (error) {
     res.status(400).json({ message: error.message });
   }
@@ -142,4 +234,7 @@ module.exports = {
   deleteChannel,
   sendMessage,
   fetchMessages,
+  editMessage,
+  deleteMessage,
+  searchGlobalMessages,
 };
